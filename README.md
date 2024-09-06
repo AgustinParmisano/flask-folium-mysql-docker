@@ -1,5 +1,6 @@
 # flask-folium-mysql-docker
 docker compose build
+
 docker compose up
 
 ## ERROR BD:
