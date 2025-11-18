@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ titulo }}</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+        
+        /* Sidebar */
+        .sidebar {
+            width: 280px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            overflow-y: auto;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+        }
+        
+        .sidebar h2 {
+            margin-bottom: 20px;
+            font-size: 1.5em;
+            text-align: center;
+            border-bottom: 2px solid rgba(255,255,255,0.3);
+            padding-bottom: 10px;
+        }
+        
+        .sidebar-section {
+            margin-bottom: 25px;
+        }
+        
+        .sidebar-section h3 {
+            font-size: 1em;
+            margin-bottom: 12px;
+            color: rgba(255,255,255,0.9);
+            text-transform: uppercase;
+            font-size: 0.85em;
+            letter-spacing: 1px;
+        }
+        
+        .import-btn {
+            width: 100%;
+            padding: 12px 15px;
+            margin-bottom: 10px;
+            background: rgba(255,255,255,0.2);
+            border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 8px;
+            color: white;
+            cursor: pointer;
+            font-size: 0.95em;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .import-btn:hover {
+            background: rgba(255,255,255,0.3);
+            border-color: rgba(255,255,255,0.5);
+            transform: translateX(5px);
+        }
+        
+        .import-btn:active {
+            transform: translateX(2px);
+        }
+        
+        .import-btn i {
+            margin-right: 10px;
+        }
+        
+        .import-btn .badge {
+            background: rgba(255,255,255,0.3);
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.8em;
+        }
+        
+        .import-btn.loading {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .import-btn.loading::after {
+            content: '...';
+            animation: dots 1.5s steps(4, end) infinite;
+        }
+        
+        @keyframes dots {
+            0%, 20% { content: '.'; }
+            40% { content: '..'; }
+            60%, 100% { content: '...'; }
+        }
+        
+        .status {
+            margin-top: 15px;
+            padding: 10px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 5px;
+            font-size: 0.85em;
+            min-height: 40px;
+        }
+        
+        .status.success {
+            background: rgba(76, 175, 80, 0.3);
+        }
+        
+        .status.error {
+            background: rgba(244, 67, 54, 0.3);
+        }
+        
+        /* Mapa */
+        .map-container {
+            flex: 1;
+            position: relative;
+        }
+        
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+        
+        /* Control de cuadras para parques */
+        .cuadras-control {
+            margin-top: 10px;
+            padding: 10px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 5px;
+        }
+        
+        .cuadras-control label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 0.85em;
+        }
+        
+        .cuadras-control input {
+            width: 100%;
+            padding: 5px;
+            border: none;
+            border-radius: 4px;
+            background: rgba(255,255,255,0.2);
+            color: white;
+        }
+        
+        .cuadras-control input::placeholder {
+            color: rgba(255,255,255,0.6);
+        }
+        
+        /* Toggle sidebar button (mobile) */
+        .toggle-sidebar {
+            display: none;
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 1000;
+            background: white;
+            border: none;
+            padding: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        
+        @media (max-width: 768px) {
+            .sidebar {
+                position: absolute;
+                left: -280px;
+                z-index: 1000;
+                transition: left 0.3s ease;
+            }
+            
+            .sidebar.open {
+                left: 0;
+            }
+            
+            .toggle-sidebar {
+                display: block;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Sidebar -->
+        <div class="sidebar" id="sidebar">
+            <h2><i class="fas fa-layer-group"></i> Importar Capas</h2>
+            
+            <div class="sidebar-section">
+                <h3>Edificios</h3>
+                <input type="file" id="file-edificios" accept=".csv" style="display: none;" onchange="handleFileSelect('edificios', this.files[0])">
+                <button class="import-btn" onclick="document.getElementById('file-edificios').click()">
+                    <span><i class="fas fa-upload"></i> Seleccionar CSV</span>
+                </button>
+                <button class="import-btn" onclick="importarEdificios()">
+                    <span><i class="fas fa-building"></i> Importar Edificios</span>
+                    <span class="badge" id="badge-edificios">0</span>
+                </button>
+                <div id="file-name-edificios" style="font-size: 0.8em; margin-top: 5px; color: rgba(255,255,255,0.7);"></div>
+            </div>
+            
+            <div class="sidebar-section">
+                <h3>Parques y Zonas</h3>
+                <div class="cuadras-control">
+                    <label>Cuadras alrededor:</label>
+                    <input type="number" id="cuadras-input" value="5" min="1" max="20" placeholder="5">
+                </div>
+                <input type="file" id="file-parques" accept=".csv" style="display: none;" onchange="handleFileSelect('parques', this.files[0])">
+                <button class="import-btn" onclick="document.getElementById('file-parques').click()">
+                    <span><i class="fas fa-upload"></i> Seleccionar CSV</span>
+                </button>
+                <button class="import-btn" onclick="importarParques()">
+                    <span><i class="fas fa-tree"></i> Importar Parques</span>
+                    <span class="badge" id="badge-parques">0</span>
+                </button>
+                <div id="file-name-parques" style="font-size: 0.8em; margin-top: 5px; color: rgba(255,255,255,0.7);"></div>
+                
+                <input type="file" id="file-zonas" accept=".csv" style="display: none; margin-top: 10px;" onchange="handleFileSelect('zonas', this.files[0])">
+                <button class="import-btn" onclick="document.getElementById('file-zonas').click()" style="margin-top: 10px;">
+                    <span><i class="fas fa-upload"></i> Seleccionar CSV</span>
+                </button>
+                <button class="import-btn" onclick="importarZonas()">
+                    <span><i class="fas fa-map-marked-alt"></i> Importar Zonas</span>
+                    <span class="badge" id="badge-zonas">0</span>
+                </button>
+                <div id="file-name-zonas" style="font-size: 0.8em; margin-top: 5px; color: rgba(255,255,255,0.7);"></div>
+            </div>
+            
+            <div class="sidebar-section">
+                <h3>Infraestructura</h3>
+                <input type="file" id="file-fibra" accept=".csv" style="display: none;" onchange="handleFileSelect('fibra', this.files[0])">
+                <button class="import-btn" onclick="document.getElementById('file-fibra').click()">
+                    <span><i class="fas fa-upload"></i> Seleccionar CSV</span>
+                </button>
+                <button class="import-btn" onclick="importarFibraOptica()">
+                    <span><i class="fas fa-wifi"></i> Importar Fibra Óptica</span>
+                    <span class="badge" id="badge-fibra">0</span>
+                </button>
+                <div id="file-name-fibra" style="font-size: 0.8em; margin-top: 5px; color: rgba(255,255,255,0.7);"></div>
+            </div>
+            
+            <div class="sidebar-section">
+                <button class="import-btn" onclick="limpiarMapa()" style="background: rgba(244, 67, 54, 0.3); border-color: rgba(244, 67, 54, 0.5);">
+                    <span><i class="fas fa-trash"></i> Limpiar Mapa</span>
+                </button>
+            </div>
+            
+            <div class="status" id="status"></div>
+        </div>
+        
+        <!-- Mapa -->
+        <div class="map-container">
+            <button class="toggle-sidebar" onclick="toggleSidebar()">
+                <i class="fas fa-bars"></i>
+            </button>
+            <div id="map"></div>
+        </div>
+    </div>
+
+    <script>
+        // Inicializar mapa
+        const catedralLaPlata = [-34.9215, -57.9545];
+        const map = L.map('map').setView(catedralLaPlata, 14);
+        
+        // Agregar marcador de la Catedral
+        L.marker(catedralLaPlata, {
+            icon: L.icon({
+                iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
+                shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+                iconSize: [25, 41],
+                iconAnchor: [12, 41],
+                popupAnchor: [1, -34],
+                shadowSize: [41, 41]
+            })
+        }).addTo(map)
+        .bindPopup('Catedral de La Plata')
+        .openPopup();
+        
+        // Agregar tiles
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+        
+        // Capas del mapa
+        const capas = {
+            edificios: L.layerGroup(),
+            parques: L.layerGroup(),
+            zonas: L.layerGroup(),
+            fibraOptica: L.layerGroup()
+        };
+        
+        // Marker clusters
+        const markerClusters = {
+            edificios: L.markerClusterGroup()
+        };
+        
+        // Agregar capas al mapa
+        Object.values(capas).forEach(capa => capa.addTo(map));
+        markerClusters.edificios.addTo(map);
+        
+        // Variables para almacenar archivos seleccionados
+        const archivosSeleccionados = {
+            edificios: null,
+            parques: null,
+            zonas: null,
+            fibra: null
+        };
+        
+        // Función para manejar la selección de archivos
+        function handleFileSelect(tipo, file) {
+            if (file) {
+                archivosSeleccionados[tipo] = file;
+                const fileNameDiv = document.getElementById(`file-name-${tipo}`);
+                fileNameDiv.textContent = `📄 ${file.name}`;
+                mostrarEstado(`Archivo ${file.name} seleccionado`, 'success');
+            }
+        }
+        
+        // Función para mostrar estado
+        function mostrarEstado(mensaje, tipo = '') {
+            const status = document.getElementById('status');
+            status.textContent = mensaje;
+            status.className = 'status ' + tipo;
+            setTimeout(() => {
+                status.textContent = '';
+                status.className = 'status';
+            }, 3000);
+        }
+        
+        // Función para importar edificios
+        async function importarEdificios() {
+            const btn = event.target.closest('.import-btn');
+            btn.classList.add('loading');
+            
+            try {
+                let response;
+                const file = archivosSeleccionados.edificios;
+                
+                if (file) {
+                    // Usar archivo seleccionado
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    response = await fetch('/api/importar/edificios', {
+                        method: 'POST',
+                        body: formData
+                    });
+                } else {
+                    // Usar base de datos o archivo por defecto
+                    response = await fetch('/api/importar/edificios', {
+                        method: 'POST'
+                    });
+                }
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Limpiar capa anterior
+                    markerClusters.edificios.clearLayers();
+                    
+                    // Agregar nuevos marcadores
+                    data.data.forEach(edificio => {
+                        const marker = L.marker([edificio.lat, edificio.lon], {
+                            icon: L.icon({
+                                iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png',
+                                shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+                                iconSize: [25, 41],
+                                iconAnchor: [12, 41],
+                                popupAnchor: [1, -34],
+                                shadowSize: [41, 41]
+                            })
+                        });
+                        marker.bindPopup(edificio.nombre);
+                        markerClusters.edificios.addLayer(marker);
+                    });
+                    
+                    document.getElementById('badge-edificios').textContent = data.count;
+                    mostrarEstado(`✓ ${data.count} edificios importados`, 'success');
+                } else {
+                    mostrarEstado(`✗ Error: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                mostrarEstado(`✗ Error al importar: ${error.message}`, 'error');
+            } finally {
+                btn.classList.remove('loading');
+            }
+        }
+        
+        // Función para importar parques
+        async function importarParques() {
+            const btn = event.target.closest('.import-btn');
+            btn.classList.add('loading');
+            
+            const cuadras = parseInt(document.getElementById('cuadras-input').value) || 5;
+            
+            try {
+                let response;
+                const file = archivosSeleccionados.parques;
+                
+                if (file) {
+                    // Usar archivo seleccionado
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    formData.append('cuadras', cuadras);
+                    response = await fetch('/api/importar/parques', {
+                        method: 'POST',
+                        body: formData
+                    });
+                } else {
+                    // Usar base de datos o archivo por defecto
+                    const formData = new FormData();
+                    formData.append('cuadras', cuadras);
+                    response = await fetch('/api/importar/parques', {
+                        method: 'POST',
+                        body: formData
+                    });
+                }
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Limpiar capa anterior
+                    capas.parques.clearLayers();
+                    
+                    // Agregar círculos y marcadores
+                    data.data.forEach(parque => {
+                        // Círculo de zona
+                        const circle = L.circle([parque.lat, parque.lon], {
+                            radius: parque.radio_metros,
+                            color: 'green',
+                            fillColor: 'green',
+                            fillOpacity: 0.2,
+                            weight: 3
+                        });
+                        circle.bindPopup(`${parque.nombre} - Zona de ${parque.radio_metros}m`);
+                        capas.parques.addLayer(circle);
+                        
+                        // Marcador central
+                        const marker = L.marker([parque.lat, parque.lon], {
+                            icon: L.icon({
+                                iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png',
+                                shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+                                iconSize: [25, 41],
+                                iconAnchor: [12, 41],
+                                popupAnchor: [1, -34],
+                                shadowSize: [41, 41]
+                            })
+                        });
+                        marker.bindPopup(parque.nombre);
+                        capas.parques.addLayer(marker);
+                    });
+                    
+                    document.getElementById('badge-parques').textContent = data.count;
+                    mostrarEstado(`✓ ${data.count} zonas de parques trazadas (${cuadras} cuadras)`, 'success');
+                } else {
+                    mostrarEstado(`✗ Error: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                mostrarEstado(`✗ Error al importar: ${error.message}`, 'error');
+            } finally {
+                btn.classList.remove('loading');
+            }
+        }
+        
+        // Función para importar zonas
+        async function importarZonas() {
+            const btn = event.target.closest('.import-btn');
+            btn.classList.add('loading');
+            
+            try {
+                let response;
+                const file = archivosSeleccionados.zonas;
+                
+                if (file) {
+                    // Usar archivo seleccionado
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    response = await fetch('/api/importar/zonas', {
+                        method: 'POST',
+                        body: formData
+                    });
+                } else {
+                    // Usar base de datos o archivo por defecto
+                    response = await fetch('/api/importar/zonas', {
+                        method: 'POST'
+                    });
+                }
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Limpiar capa anterior
+                    capas.zonas.clearLayers();
+                    
+                    // Agregar círculos
+                    data.data.forEach(zona => {
+                        const circle = L.circleMarker([zona.lat, zona.lon], {
+                            radius: 50,
+                            color: 'green',
+                            fillColor: 'green',
+                            fillOpacity: 0.3,
+                            weight: 2
+                        });
+                        circle.bindPopup(zona.nombre);
+                        capas.zonas.addLayer(circle);
+                    });
+                    
+                    document.getElementById('badge-zonas').textContent = data.count;
+                    mostrarEstado(`✓ ${data.count} zonas importadas`, 'success');
+                } else {
+                    mostrarEstado(`✗ Error: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                mostrarEstado(`✗ Error al importar: ${error.message}`, 'error');
+            } finally {
+                btn.classList.remove('loading');
+            }
+        }
+        
+        // Función para importar fibra óptica
+        async function importarFibraOptica() {
+            const btn = event.target.closest('.import-btn');
+            btn.classList.add('loading');
+            
+            try {
+                let response;
+                const file = archivosSeleccionados.fibra;
+                
+                if (file) {
+                    // Usar archivo seleccionado
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    response = await fetch('/api/importar/fibra_optica', {
+                        method: 'POST',
+                        body: formData
+                    });
+                } else {
+                    // Usar base de datos o archivo por defecto
+                    response = await fetch('/api/importar/fibra_optica', {
+                        method: 'POST'
+                    });
+                }
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Limpiar capa anterior
+                    capas.fibraOptica.clearLayers();
+                    
+                    // Agregar marcadores
+                    const puntos = data.data.map(cable => [cable.lat, cable.lon]);
+                    
+                    // Línea conectando puntos
+                    if (puntos.length > 1) {
+                        const polyline = L.polyline(puntos, {
+                            color: 'orange',
+                            weight: 4,
+                            opacity: 0.7
+                        });
+                        polyline.bindPopup('Cable de Fibra Óptica');
+                        capas.fibraOptica.addLayer(polyline);
+                    }
+                    
+                    // Marcadores individuales
+                    data.data.forEach(cable => {
+                        const marker = L.marker([cable.lat, cable.lon], {
+                            icon: L.icon({
+                                iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-orange.png',
+                                shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+                                iconSize: [25, 41],
+                                iconAnchor: [12, 41],
+                                popupAnchor: [1, -34],
+                                shadowSize: [41, 41]
+                            })
+                        });
+                        marker.bindPopup(cable.nombre);
+                        capas.fibraOptica.addLayer(marker);
+                    });
+                    
+                    document.getElementById('badge-fibra').textContent = data.count;
+                    mostrarEstado(`✓ ${data.count} puntos de fibra óptica importados`, 'success');
+                } else {
+                    mostrarEstado(`✗ Error: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                mostrarEstado(`✗ Error al importar: ${error.message}`, 'error');
+            } finally {
+                btn.classList.remove('loading');
+            }
+        }
+        
+        // Función para limpiar mapa
+        function limpiarMapa() {
+            Object.values(capas).forEach(capa => capa.clearLayers());
+            markerClusters.edificios.clearLayers();
+            
+            // Resetear badges
+            document.getElementById('badge-edificios').textContent = '0';
+            document.getElementById('badge-parques').textContent = '0';
+            document.getElementById('badge-zonas').textContent = '0';
+            document.getElementById('badge-fibra').textContent = '0';
+            
+            mostrarEstado('✓ Mapa limpiado', 'success');
+        }
+        
+        // Toggle sidebar en mobile
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+        }
+    </script>
+</body>
+</html>
+
